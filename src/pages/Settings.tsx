@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,7 +8,6 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,12 +16,9 @@ import {
   Bell, 
   Shield, 
   Building, 
-  CreditCard, 
   Plus,
-  Edit,
   Trash2,
-  Save,
-  X
+  Save
 } from "lucide-react";
 
 interface Branch {
@@ -29,6 +26,26 @@ interface Branch {
   name: string;
   code: string;
   address: string;
+}
+
+interface UserSettings {
+  notifications: {
+    email: boolean;
+    sms: boolean;
+    push: boolean;
+    marketing: boolean;
+  };
+  privacy: {
+    profile_visibility: "public" | "business_only" | "private";
+    data_sharing: boolean;
+    analytics_tracking: boolean;
+  };
+  business_settings?: {
+    auto_reorder: boolean;
+    low_stock_threshold: number;
+    default_markup_percentage: number;
+    tax_rate: number;
+  };
 }
 
 const Settings = () => {
@@ -42,29 +59,30 @@ const Settings = () => {
     address: string;
   }>({ name: "", email: "", phone: "", address: "" });
 
-  const [notifications, setNotifications] = useState<{
-    email_enabled: boolean;
-    push_enabled: boolean;
-    sms_enabled: boolean;
-  }>({ email_enabled: false, push_enabled: false, sms_enabled: false });
+  const [userSettings, setUserSettings] = useState<UserSettings>({
+    notifications: {
+      email: true,
+      sms: false,
+      push: true,
+      marketing: false,
+    },
+    privacy: {
+      profile_visibility: "business_only",
+      data_sharing: false,
+      analytics_tracking: true,
+    },
+  });
 
-  const [privacy, setPrivacy] = useState<{
-    profile_visibility: "public" | "private";
-    data_sharing: boolean;
-  }>({ profile_visibility: "public", data_sharing: false });
-
-  const [business, setBusiness] = useState<{
-    business_name: string;
-    industry: string;
-    tax_id: string;
-    branches: Branch[];
-  }>({ business_name: "", industry: "", tax_id: "", branches: [{ id: "1", name: "Main Branch", code: "MB001", address: "Headquarters" }] });
+  const [branches, setBranches] = useState<Branch[]>([
+    { id: "1", name: "Main Branch", code: "MB001", address: "Headquarters" }
+  ]);
 
   useEffect(() => {
     const fetchSettings = async () => {
       if (!user) return;
 
       try {
+        // Fetch profile data
         const { data: profileData, error: profileError } = await supabase
           .from("profiles")
           .select("name, email, phone, address")
@@ -80,47 +98,41 @@ const Settings = () => {
           address: profileData?.address || "",
         });
 
-        const { data: notificationData, error: notificationError } = await supabase
-          .from("notification_settings")
-          .select("email_enabled, push_enabled, sms_enabled")
+        // Fetch user settings
+        const { data: settingsData, error: settingsError } = await supabase
+          .from("user_settings")
+          .select("notifications, privacy, business_settings")
           .eq("user_id", user.id)
           .single();
 
-        if (notificationError) throw notificationError;
+        if (settingsError && settingsError.code !== 'PGRST116') {
+          throw settingsError;
+        }
 
-        setNotifications({
-          email_enabled: notificationData?.email_enabled || false,
-          push_enabled: notificationData?.push_enabled || false,
-          sms_enabled: notificationData?.sms_enabled || false,
-        });
+        if (settingsData) {
+          setUserSettings({
+            notifications: typeof settingsData.notifications === 'object' 
+              ? settingsData.notifications as any 
+              : userSettings.notifications,
+            privacy: typeof settingsData.privacy === 'object' 
+              ? settingsData.privacy as any 
+              : userSettings.privacy,
+            business_settings: settingsData.business_settings as any,
+          });
+        }
 
-        const { data: privacyData, error: privacyError } = await supabase
-          .from("privacy_settings")
-          .select("profile_visibility, data_sharing")
-          .eq("user_id", user.id)
-          .single();
+        // Fetch branches
+        const { data: branchesData, error: branchesError } = await supabase
+          .from("branches")
+          .select("id, name, code, address")
+          .eq("user_id", user.id);
 
-        if (privacyError) throw privacyError;
+        if (branchesError) throw branchesError;
 
-        setPrivacy({
-          profile_visibility: privacyData?.profile_visibility || "public",
-          data_sharing: privacyData?.data_sharing || false,
-        });
+        if (branchesData && branchesData.length > 0) {
+          setBranches(branchesData);
+        }
 
-        const { data: businessData, error: businessError } = await supabase
-          .from("business_settings")
-          .select("business_name, industry, tax_id, branches")
-          .eq("user_id", user.id)
-          .single();
-
-        if (businessError) throw businessError;
-
-        setBusiness({
-          business_name: businessData?.business_name || "",
-          industry: businessData?.industry || "",
-          tax_id: businessData?.tax_id || "",
-          branches: businessData?.branches || [{ id: "1", name: "Main Branch", code: "MB001", address: "Headquarters" }],
-        });
       } catch (error: any) {
         console.error("Error fetching settings:", error);
         toast({
@@ -162,107 +174,51 @@ const Settings = () => {
     }
   };
 
-  const handleSaveNotifications = async () => {
+  const handleSaveSettings = async () => {
     try {
       const { error } = await supabase
-        .from("notification_settings")
-        .update({
-          email_enabled: notifications.email_enabled,
-          push_enabled: notifications.push_enabled,
-          sms_enabled: notifications.sms_enabled,
-        })
-        .eq("user_id", user?.id);
+        .from("user_settings")
+        .upsert({
+          user_id: user?.id,
+          notifications: userSettings.notifications,
+          privacy: userSettings.privacy,
+          business_settings: userSettings.business_settings,
+          updated_at: new Date().toISOString(),
+        });
 
       if (error) throw error;
 
       toast({
-        title: "Notifications Updated",
-        description: "Your notification settings have been updated successfully",
+        title: "Settings Updated",
+        description: "Your settings have been updated successfully",
       });
     } catch (error: any) {
-      console.error("Error updating notifications:", error);
+      console.error("Error updating settings:", error);
       toast({
         title: "Error",
-        description: "Failed to update notification settings",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleSavePrivacy = async () => {
-    try {
-      const { error } = await supabase
-        .from("privacy_settings")
-        .update({
-          profile_visibility: privacy.profile_visibility,
-          data_sharing: privacy.data_sharing,
-        })
-        .eq("user_id", user?.id);
-
-      if (error) throw error;
-
-      toast({
-        title: "Privacy Updated",
-        description: "Your privacy settings have been updated successfully",
-      });
-    } catch (error: any) {
-      console.error("Error updating privacy:", error);
-      toast({
-        title: "Error",
-        description: "Failed to update privacy settings",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleSaveBusiness = async () => {
-    try {
-      const { error } = await supabase
-        .from("business_settings")
-        .update({
-          business_name: business.business_name,
-          industry: business.industry,
-          tax_id: business.tax_id,
-          branches: business.branches,
-        })
-        .eq("user_id", user?.id);
-
-      if (error) throw error;
-
-      toast({
-        title: "Business Updated",
-        description: "Your business settings have been updated successfully",
-      });
-    } catch (error: any) {
-      console.error("Error updating business:", error);
-      toast({
-        title: "Error",
-        description: "Failed to update business settings",
+        description: "Failed to update settings",
         variant: "destructive",
       });
     }
   };
 
   const addBranch = () => {
-    setBusiness({
-      ...business,
-      branches: [
-        ...business.branches,
-        { id: Date.now().toString(), name: "New Branch", code: "NB001", address: "Address" },
-      ],
-    });
+    setBranches([
+      ...branches,
+      { id: Date.now().toString(), name: "New Branch", code: "NB001", address: "Address" },
+    ]);
   };
 
   const removeBranch = (index: number) => {
-    const newBranches = [...business.branches];
+    const newBranches = [...branches];
     newBranches.splice(index, 1);
-    setBusiness({ ...business, branches: newBranches });
+    setBranches(newBranches);
   };
 
   const updateBranch = (index: number, field: string, value: string) => {
-    const newBranches = [...business.branches];
+    const newBranches = [...branches];
     newBranches[index] = { ...newBranches[index], [field]: value };
-    setBusiness({ ...business, branches: newBranches });
+    setBranches(newBranches);
   };
 
   return (
@@ -291,10 +247,6 @@ const Settings = () => {
               <Building className="h-4 w-4 mr-2" />
               Business
             </TabsTrigger>
-            {/* <TabsTrigger value="billing">
-              <CreditCard className="h-4 w-4 mr-2" />
-              Billing
-            </TabsTrigger> */}
           </TabsList>
 
           <TabsContent value="profile">
@@ -356,27 +308,55 @@ const Settings = () => {
                   <Label htmlFor="email_enabled">Email Notifications</Label>
                   <Switch
                     id="email_enabled"
-                    checked={notifications.email_enabled}
-                    onCheckedChange={(checked) => setNotifications({ ...notifications, email_enabled: checked })}
+                    checked={userSettings.notifications.email}
+                    onCheckedChange={(checked) => 
+                      setUserSettings({
+                        ...userSettings,
+                        notifications: { ...userSettings.notifications, email: checked }
+                      })
+                    }
                   />
                 </div>
                 <div className="flex items-center justify-between">
                   <Label htmlFor="push_enabled">Push Notifications</Label>
                   <Switch
                     id="push_enabled"
-                    checked={notifications.push_enabled}
-                    onCheckedChange={(checked) => setNotifications({ ...notifications, push_enabled: checked })}
+                    checked={userSettings.notifications.push}
+                    onCheckedChange={(checked) => 
+                      setUserSettings({
+                        ...userSettings,
+                        notifications: { ...userSettings.notifications, push: checked }
+                      })
+                    }
                   />
                 </div>
                 <div className="flex items-center justify-between">
                   <Label htmlFor="sms_enabled">SMS Notifications</Label>
                   <Switch
                     id="sms_enabled"
-                    checked={notifications.sms_enabled}
-                    onCheckedChange={(checked) => setNotifications({ ...notifications, sms_enabled: checked })}
+                    checked={userSettings.notifications.sms}
+                    onCheckedChange={(checked) => 
+                      setUserSettings({
+                        ...userSettings,
+                        notifications: { ...userSettings.notifications, sms: checked }
+                      })
+                    }
                   />
                 </div>
-                <Button onClick={handleSaveNotifications}>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="marketing_enabled">Marketing Notifications</Label>
+                  <Switch
+                    id="marketing_enabled"
+                    checked={userSettings.notifications.marketing}
+                    onCheckedChange={(checked) => 
+                      setUserSettings({
+                        ...userSettings,
+                        notifications: { ...userSettings.notifications, marketing: checked }
+                      })
+                    }
+                  />
+                </div>
+                <Button onClick={handleSaveSettings}>
                   <Save className="h-4 w-4 mr-2" />
                   Save Notifications
                 </Button>
@@ -393,14 +373,20 @@ const Settings = () => {
                 <div>
                   <Label htmlFor="profile_visibility">Profile Visibility</Label>
                   <Select
-                    value={privacy.profile_visibility}
-                    onValueChange={(value) => setPrivacy({ ...privacy, profile_visibility: value as "public" | "private" })}
+                    value={userSettings.privacy.profile_visibility}
+                    onValueChange={(value) => 
+                      setUserSettings({
+                        ...userSettings,
+                        privacy: { ...userSettings.privacy, profile_visibility: value as any }
+                      })
+                    }
                   >
                     <SelectTrigger className="w-[180px]">
                       <SelectValue placeholder="Select" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="public">Public</SelectItem>
+                      <SelectItem value="business_only">Business Only</SelectItem>
                       <SelectItem value="private">Private</SelectItem>
                     </SelectContent>
                   </Select>
@@ -409,11 +395,29 @@ const Settings = () => {
                   <Label htmlFor="data_sharing">Allow Data Sharing</Label>
                   <Switch
                     id="data_sharing"
-                    checked={privacy.data_sharing}
-                    onCheckedChange={(checked) => setPrivacy({ ...privacy, data_sharing: checked })}
+                    checked={userSettings.privacy.data_sharing}
+                    onCheckedChange={(checked) => 
+                      setUserSettings({
+                        ...userSettings,
+                        privacy: { ...userSettings.privacy, data_sharing: checked }
+                      })
+                    }
                   />
                 </div>
-                <Button onClick={handleSavePrivacy}>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="analytics_tracking">Analytics Tracking</Label>
+                  <Switch
+                    id="analytics_tracking"
+                    checked={userSettings.privacy.analytics_tracking}
+                    onCheckedChange={(checked) => 
+                      setUserSettings({
+                        ...userSettings,
+                        privacy: { ...userSettings.privacy, analytics_tracking: checked }
+                      })
+                    }
+                  />
+                </div>
+                <Button onClick={handleSaveSettings}>
                   <Save className="h-4 w-4 mr-2" />
                   Save Privacy
                 </Button>
@@ -427,38 +431,10 @@ const Settings = () => {
                 <CardTitle>Business Settings</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="business_name">Business Name</Label>
-                  <Input
-                    type="text"
-                    id="business_name"
-                    value={business.business_name}
-                    onChange={(e) => setBusiness({ ...business, business_name: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="industry">Industry</Label>
-                  <Input
-                    type="text"
-                    id="industry"
-                    value={business.industry}
-                    onChange={(e) => setBusiness({ ...business, industry: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="tax_id">Tax ID</Label>
-                  <Input
-                    type="text"
-                    id="tax_id"
-                    value={business.tax_id}
-                    onChange={(e) => setBusiness({ ...business, tax_id: e.target.value })}
-                  />
-                </div>
-
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium">Branches</h4>
                   <div className="space-y-3">
-                    {business.branches.map((branch, index) => (
+                    {branches.map((branch, index) => (
                       <div key={branch.id} className="flex items-center gap-4">
                         <div className="grid gap-2" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
                           <div>
@@ -501,7 +477,7 @@ const Settings = () => {
                   </Button>
                 </div>
 
-                <Button onClick={handleSaveBusiness}>
+                <Button onClick={handleSaveSettings}>
                   <Save className="h-4 w-4 mr-2" />
                   Save Business
                 </Button>

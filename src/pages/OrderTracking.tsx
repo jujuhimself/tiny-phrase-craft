@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,13 +18,21 @@ import {
   Eye
 } from "lucide-react";
 
+interface OrderItem {
+  id?: string;
+  name: string;
+  quantity: number;
+  sell_price: number;
+  pharmacy_id?: string;
+}
+
 interface Order {
   id: string;
   order_number: string;
   status: string;
   total_amount: number;
   created_at: string;
-  items: any[];
+  items: OrderItem[];
   pharmacy_name?: string;
   pharmacy_phone?: string;
   estimated_delivery?: string;
@@ -60,12 +67,25 @@ const OrderTracking = () => {
 
       const ordersWithDetails = await Promise.all(
         (data || []).map(async (order) => {
+          // Parse items safely
+          let parsedItems: OrderItem[] = [];
+          try {
+            if (typeof order.items === 'string') {
+              parsedItems = JSON.parse(order.items);
+            } else if (Array.isArray(order.items)) {
+              parsedItems = order.items as OrderItem[];
+            }
+          } catch (e) {
+            console.error('Error parsing order items:', e);
+            parsedItems = [];
+          }
+
           // Get pharmacy details for each order
           let pharmacyName = 'Unknown Pharmacy';
           let pharmacyPhone = '';
 
-          if (order.items && order.items.length > 0) {
-            const firstItem = order.items[0];
+          if (parsedItems && parsedItems.length > 0) {
+            const firstItem = parsedItems[0];
             if (firstItem.pharmacy_id) {
               const { data: pharmacyData } = await supabase
                 .from('profiles')
@@ -82,6 +102,7 @@ const OrderTracking = () => {
 
           return {
             ...order,
+            items: parsedItems,
             pharmacy_name: pharmacyName,
             pharmacy_phone: pharmacyPhone,
             estimated_delivery: getEstimatedDelivery(order.created_at, order.status),

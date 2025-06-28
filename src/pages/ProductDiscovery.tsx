@@ -45,6 +45,13 @@ interface Pharmacy {
   operating_hours: string;
 }
 
+interface CartItem {
+  id: string;
+  name: string;
+  sell_price: number;
+  quantity: number;
+}
+
 const ProductDiscovery = () => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -54,7 +61,7 @@ const ProductDiscovery = () => {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedPharmacy, setSelectedPharmacy] = useState("all");
   const [isLoading, setIsLoading] = useState(false);
-  const [cartItems, setCartItems] = useState<any[]>([]);
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
   const categories = ["all", "Medicines", "Supplements", "Medical Supplies", "Personal Care"];
 
@@ -151,7 +158,22 @@ const ProductDiscovery = () => {
 
       if (error && error.code !== 'PGRST116') throw error;
 
-      setCartItems(data?.items || []);
+      // Parse cart items safely
+      let parsedItems: CartItem[] = [];
+      try {
+        if (data?.items) {
+          if (typeof data.items === 'string') {
+            parsedItems = JSON.parse(data.items);
+          } else if (Array.isArray(data.items)) {
+            parsedItems = data.items as CartItem[];
+          }
+        }
+      } catch (e) {
+        console.error('Error parsing cart items:', e);
+        parsedItems = [];
+      }
+
+      setCartItems(parsedItems);
     } catch (error: any) {
       console.error('Error loading cart:', error);
     }
@@ -168,14 +190,19 @@ const ProductDiscovery = () => {
     }
 
     const existingItem = cartItems.find(item => item.id === product.id);
-    let newCartItems;
+    let newCartItems: CartItem[];
 
     if (existingItem) {
       newCartItems = cartItems.map(item =>
         item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
       );
     } else {
-      newCartItems = [...cartItems, { ...product, quantity: 1 }];
+      newCartItems = [...cartItems, { 
+        id: product.id,
+        name: product.name,
+        sell_price: product.sell_price,
+        quantity: 1 
+      }];
     }
 
     try {
