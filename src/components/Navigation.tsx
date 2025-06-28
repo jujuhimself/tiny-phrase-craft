@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 export const Navigation = () => {
-  const { user, signOut } = useAuth();
+  const { user, logout } = useAuth(); // Changed from signOut to logout
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -65,7 +65,7 @@ export const Navigation = () => {
                 {user?.email}
               </span>
               <Button
-                onClick={signOut}
+                onClick={logout} // Changed from signOut to logout
                 variant="outline"
                 size="sm"
                 className="flex items-center space-x-1"
@@ -121,7 +121,7 @@ export const Navigation = () => {
               </div>
               <Button
                 onClick={() => {
-                  signOut();
+                  logout(); // Changed from signOut to logout
                   setIsMobileMenuOpen(false);
                 }}
                 variant="outline"

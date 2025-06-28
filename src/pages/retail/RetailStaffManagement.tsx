@@ -59,9 +59,10 @@ const RetailStaffManagement = () => {
 
       if (error) throw error;
       
-      // Transform data to match our interface
+      // Transform data to match our interface and ensure role type safety
       const transformedStaff = (data || []).map(member => ({
         ...member,
+        role: member.role as 'cashier' | 'manager' | 'pharmacist' | 'assistant', // Type assertion
         permissions: rolePermissions[member.role as keyof typeof rolePermissions] || []
       }));
       

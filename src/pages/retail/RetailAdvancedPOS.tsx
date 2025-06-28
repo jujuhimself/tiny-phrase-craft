@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -268,7 +267,7 @@ const RetailAdvancedPOS = () => {
         </head>
         <body>
           <div class="header">
-            <h2>${user?.business_name || 'Retail Pharmacy'}</h2>
+            <h2>${user?.businessName || 'Retail Pharmacy'}</h2>
             <p>Receipt #${currentReceipt.id.substring(0, 8)}</p>
             <p>${new Date(currentReceipt.timestamp).toLocaleString()}</p>
             ${currentReceipt.customerName ? `<p>Customer: ${currentReceipt.customerName}</p>` : ''}
@@ -561,7 +560,7 @@ const RetailAdvancedPOS = () => {
           {currentReceipt && (
             <div className="space-y-4">
               <div className="text-center border-b pb-4">
-                <h3 className="font-bold">{user?.business_name || 'Retail Pharmacy'}</h3>
+                <h3 className="font-bold">{user?.businessName || 'Retail Pharmacy'}</h3>
                 <p className="text-sm">Receipt #{currentReceipt.id.substring(0, 8)}</p>
                 <p className="text-sm">{new Date(currentReceipt.timestamp).toLocaleString()}</p>
                 {currentReceipt.customerName && (
