@@ -67,13 +67,13 @@ const OrderTracking = () => {
 
       const ordersWithDetails = await Promise.all(
         (data || []).map(async (order) => {
-          // Parse items safely
+          // Parse items safely with proper type casting
           let parsedItems: OrderItem[] = [];
           try {
             if (typeof order.items === 'string') {
               parsedItems = JSON.parse(order.items);
             } else if (Array.isArray(order.items)) {
-              parsedItems = order.items as OrderItem[];
+              parsedItems = (order.items as unknown) as OrderItem[];
             }
           } catch (e) {
             console.error('Error parsing order items:', e);

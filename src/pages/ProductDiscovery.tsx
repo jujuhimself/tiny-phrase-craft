@@ -158,14 +158,14 @@ const ProductDiscovery = () => {
 
       if (error && error.code !== 'PGRST116') throw error;
 
-      // Parse cart items safely
+      // Parse cart items safely with proper type casting
       let parsedItems: CartItem[] = [];
       try {
         if (data?.items) {
           if (typeof data.items === 'string') {
             parsedItems = JSON.parse(data.items);
           } else if (Array.isArray(data.items)) {
-            parsedItems = data.items as CartItem[];
+            parsedItems = (data.items as unknown) as CartItem[];
           }
         }
       } catch (e) {
@@ -211,7 +211,7 @@ const ProductDiscovery = () => {
         .upsert({
           user_id: user.id,
           status: 'cart',
-          items: newCartItems,
+          items: JSON.stringify(newCartItems), // Convert to JSON string
           total_amount: newCartItems.reduce((sum, item) => sum + item.sell_price * item.quantity, 0),
           order_number: `CART-${user.id}-${Date.now()}`
         });
